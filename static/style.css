@@ -1,0 +1,50 @@
+body {
+    font-family: Arial, sans-serif;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    text-align: center;
+    background: #f4f6fb;
+    color: #1f2a44;
+}
+
+h1 {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+p {
+    color: #4a5675;
+    line-height: 1.5;
+}
+
+button, .btn {
+    display: inline-block;
+    background: #2f6bff;
+    color: white;
+    border: none;
+    border-radius: 999px;
+    padding: 14px 28px;
+    font-size: 18px;
+    margin: 8px 4px;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+button:disabled {
+    background: #b8c2d9;
+    cursor: not-allowed;
+}
+
+#hangupBtn {
+    background: #e5484d;
+}
+
+#hangupBtn:disabled {
+    background: #e5484d;
+}
+
+#status {
+    font-weight: bold;
+    margin-top: 24px;
+}

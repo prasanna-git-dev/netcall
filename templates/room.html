@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NetCall Room</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Room {{ code }}</h1>
+    <p>Share this page's link with the person you want to call.</p>
+
+    <button id="callBtn">Call</button>
+    <button id="hangupBtn" disabled>Hang up</button>
+
+    <div id="incoming" hidden>
+        <p><strong>Someone is calling you...</strong></p>
+        <button id="answerBtn">Answer</button>
+        <button id="declineBtn">Decline</button>
+    </div>
+
+    <p id="status">Click "Call" to ring the other person.</p>
+
+    <div id="afterCall" hidden>
+        <button id="againBtn">Call again</button>
+        <a class="btn" href="/">Back to home</a>
+    </div>
+
+    <audio id="remoteAudio" autoplay></audio>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        const code = "{{ code }}";
+        const statusEl = document.getElementById("status");
+        const callBtn = document.getElementById("callBtn");
+        const hangupBtn = document.getElementById("hangupBtn");
+        const incomingBox = document.getElementById("incoming");
+        const answerBtn = document.getElementById("answerBtn");
+        const declineBtn = document.getElementById("declineBtn");
+
+        let localStream;
+        let pc;
+        let pendingCandidates = [];
+
+        socket.on("connect", function () {
+            socket.emit("enter", { code: code });
+        });
+
+        async function getMic() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                return true;
+            } catch (err) {
+                statusEl.innerText = "Could not use microphone: " + err.message;
+                return false;
+            }
+        }
+
+        function createPeer() {
+            pc = new RTCPeerConnection({
+                iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+            });
+            localStream.getTracks().forEach(function (track) {
+                pc.addTrack(track, localStream);
+            });
+            pc.ontrack = function (event) {
+                document.getElementById("remoteAudio").srcObject = event.streams[0];
+            };
+            pc.onicecandidate = function (event) {
+                if (event.candidate) {
+                    socket.emit("signal", { code: code, message: { candidate: event.candidate } });
+                }
+            };
+            pc.onconnectionstatechange = function () {
+                if (pc) {
+                    statusEl.innerText = "Connection: " + pc.connectionState;
+                }
+            };
+        }
+
+        async function flushCandidates() {
+            for (const c of pendingCandidates) {
+                await pc.addIceCandidate(c);
+            }
+            pendingCandidates = [];
+        }
+
+        function endCall(text) {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(function (track) {
+                    track.stop();
+                });
+            }
+            document.getElementById("remoteAudio").srcObject = null;
+            incomingBox.hidden = true;
+            document.title = "NetCall Room";
+            hangupBtn.disabled = true;
+            document.getElementById("afterCall").hidden = false;
+            statusEl.innerText = text;
+        }
+
+        callBtn.onclick = async function () {
+            if (!(await getMic())) {
+                return;
+            }
+            socket.emit("call", { code: code });
+            statusEl.innerText = "Calling... waiting for the other person to answer.";
+            callBtn.disabled = true;
+            hangupBtn.disabled = false;
+        };
+
+        answerBtn.onclick = async function () {
+            if (!(await getMic())) {
+                return;
+            }
+            incomingBox.hidden = true;
+            document.title = "NetCall Room";
+            socket.emit("accept", { code: code });
+            statusEl.innerText = "Connecting...";
+            callBtn.disabled = true;
+            hangupBtn.disabled = false;
+        };
+
+        declineBtn.onclick = function () {
+            incomingBox.hidden = true;
+            document.title = "NetCall Room";
+            socket.emit("decline", { code: code });
+            statusEl.innerText = "You declined the call.";
+        };
+
+        hangupBtn.onclick = function () {
+            socket.emit("signal", { code: code, message: { hangup: true } });
+            endCall("Call ended.");
+        };
+
+        document.getElementById("againBtn").onclick = function () {
+            location.reload();
+        };
+
+        socket.on("incoming", function () {
+            incomingBox.hidden = false;
+            document.title = "Incoming call - NetCall";
+            statusEl.innerText = "Incoming call";
+        });
+
+        socket.on("accepted", async function () {
+            statusEl.innerText = "Connecting...";
+            createPeer();
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit("signal", { code: code, message: { offer: offer } });
+        });
+
+        socket.on("declined", function () {
+            endCall("The other person declined the call.");
+        });
+
+        socket.on("signal", async function (message) {
+            if (message.offer) {
+                createPeer();
+                await pc.setRemoteDescription(message.offer);
+                await flushCandidates();
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socket.emit("signal", { code: code, message: { answer: answer } });
+            } else if (message.answer) {
+                await pc.setRemoteDescription(message.answer);
+                await flushCandidates();
+            } else if (message.candidate) {
+                if (pc && pc.remoteDescription) {
+                    await pc.addIceCandidate(message.candidate);
+                } else {
+                    pendingCandidates.push(message.candidate);
+                }
+            } else if (message.hangup) {
+                endCall("The other person ended the call.");
+            }
+        });
+    </script>
+</body>
+</html>
