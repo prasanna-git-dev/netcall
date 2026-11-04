@@ -5,3 +5,7 @@ db = SQLAlchemy()
 class Room(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(10), unique=True, nullable=False)
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)
+    phone = db.Column(db.String(15), unique=True, nullable=False)

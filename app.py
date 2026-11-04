@@ -1,7 +1,7 @@
 import secrets
-from flask import Flask, render_template, redirect, url_for
+from flask import Flask, render_template, redirect, url_for, request
 from flask_socketio import SocketIO, join_room, emit
-from models import db, Room
+from models import db, Room, User
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///netcall.db"
@@ -27,6 +27,16 @@ def create_room():
 def list_rooms():
     rooms = Room.query.all()
     return ", ".join(room.code for room in rooms)
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if request.method == "POST":
+        name = request.form["name"]
+        phone = request.form["phone"]
+        user = User(name=name, phone=phone)
+        db.session.add(user)
+        db.session.commit()
+        return redirect(url_for("home"))
+    return render_template("signup.html")
 
 @app.route("/room/<code>")
 def open_room(code):
